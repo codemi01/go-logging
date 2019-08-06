@@ -11,6 +11,8 @@ import (
 	"fmt"
 	"io"
 	"log"
+
+	"github.com/rollbar/rollbar-go"
 )
 
 type color int
@@ -45,14 +47,22 @@ var (
 
 // LogBackend utilizes the standard log module.
 type LogBackend struct {
-	Logger      *log.Logger
-	Color       bool
-	ColorConfig []string
+	Logger        *log.Logger
+	Color         bool
+	ColorConfig   []string
+	EnableRollbar bool
 }
 
 // NewLogBackend creates a new LogBackend.
 func NewLogBackend(out io.Writer, prefix string, flag int) *LogBackend {
 	return &LogBackend{Logger: log.New(out, prefix, flag)}
+}
+
+func SetRollbarLogBackend(logBackend *LogBackend, token, env string) *LogBackend {
+	rollbar.SetToken(token)
+	rollbar.SetEnvironment(env)
+	logBackend.EnableRollbar = true
+	return logBackend
 }
 
 // Log implements the Backend interface.
@@ -69,9 +79,15 @@ func (b *LogBackend) Log(level Level, calldepth int, rec *Record) error {
 		buf.Write([]byte("\033[0m"))
 		// For some reason, the Go logger arbitrarily decided "2" was the correct
 		// call depth...
+		if b.EnableRollbar {
+			rollbar.Message(level.String(), rec.Formatted(calldepth+1))
+		}
 		return b.Logger.Output(calldepth+2, buf.String())
 	}
 
+	if b.EnableRollbar {
+		rollbar.Message(level.String(), rec.Formatted(calldepth+1))
+	}
 	return b.Logger.Output(calldepth+2, rec.Formatted(calldepth+1))
 }
 
